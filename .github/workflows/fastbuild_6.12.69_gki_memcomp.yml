@@ -10,6 +10,8 @@ env:
   # memcomp 补丁来源：https://github.com/nakixii/memcomp
   # (RFC v1, ACK android16-6.12 分支 713abbe0490a，已按 6.12.69 源码树重制)
   MEMCOMP_PATCH: 'memcomp_patch/memcomp-android16-6.12.patch'
+  # 补丁固定从 memcomp 分支取，即使从 main 触发也能正确构建
+  MEMCOMP_REF: 'memcomp'
 
 on:
   workflow_dispatch:
@@ -267,7 +269,7 @@ jobs:
           echo "正在应用 memcomp 内存压缩补丁(https://github.com/nakixii/memcomp)…"
           cd kernel_workspace
           # 补丁需在其他第三方补丁之前应用，以保证它与官方源码的上下文一致
-          wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/$GITHUB_REF_NAME/${{ env.MEMCOMP_PATCH }} -O memcomp.patch
+          wget https://github.com/$GITHUB_REPOSITORY/raw/refs/heads/${{ env.MEMCOMP_REF }}/${{ env.MEMCOMP_PATCH }} -O memcomp.patch
           cd ./common
           set +e
           patch -p1 -F 3 --no-backup-if-mismatch < ../memcomp.patch > memcomp_patch.log 2>&1
