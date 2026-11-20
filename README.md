@@ -32,6 +32,7 @@
 - [x] 添加了对[Mountify](https://github.com/backslashxx/mountify)模块的支持
 - [x] 加入Re:Kernel支持，与Freezer，NoActive等软件配合降低功耗
 - [x] 加入[内核防格基带保护(By @showdo)](https://github.com/vc-teahouse/Baseband-guard)，有效防止恶意格机脚本/程序对系统分区数据的破坏
+- [x] [memcomp](https://github.com/nakixii/memcomp) 内存压缩内核（实验性，独立 `memcomp` 分支，基于 6.12.69 GKI 源码树重制补丁；与 zram/zswap 互斥，用内存内压缩替代传统 zram swap）
 ## 待实现：
 - [ ] zram内置化，无需外置zram.ko挂载 ~~（有了新版 lz4&zstd 补丁真的还有必要吗）~~
 - [ ] Nethunter 网卡监听模式支持
