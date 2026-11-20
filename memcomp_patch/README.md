@@ -35,7 +35,13 @@
 4. `mm/shmem.c`：6.12.69 的 `shmem_free_swap()` 已改为 xarray 实现，memcomp token 按“一页”语义改写，
    并把 `free_swap_and_cache_nr()` 换成 `memcomp_invalidate_cache()`；
 5. `mm/migrate.c`：`__migrate_folio()` 中 memcomp 迁移 + 回滚逻辑按 6.12.69 结构落位；
-6. `mm/vmscan.c`：`shrink_folio_list()` 末尾的 `keep_locked`/`keep` 与 `memcomp_finish_deferred()` 按 6.12.69 结构落位。
+6. `mm/vmscan.c`：`shrink_folio_list()` 末尾的 `keep_locked`/`keep` 与 `memcomp_finish_deferred()` 按 6.12.69 结构落位；
+7. `mm/userfaultfd.c`：6.12.69 的 `move_swap_pte()` 增加了 `si`/`entry` 两个参数（swap cache 竞态修复），
+   memcomp 路径以 `NULL, NULL, entry` 调用，并在函数内改成 `else if (si)` 跳过 `si->swap_map[]` 检查
+   （memcomp entry 没有 swap 设备）；`move_pages_ptes()` 的返回值变量在 6.12.69 叫 `ret` 而非 `err`；
+8. `arch/arm64/mm/contpte.c`：上游补丁删除的 `pgprot_t prot;` 在 6.12.23 属于 `contpte_ptep_get_lockless()`
+   （6.12.69 已改用 `contpte_is_consistent()`），该删除被 patch 按上下文误落到 `contpte_set_ptes()`，
+   重制时保留 `contpte_set_ptes()` 的 `prot` 声明。
 
 ## 应用方式
 

@@ -893,7 +893,7 @@ index 9695426..b8538bb 100644
  static __always_inline void wrprotect_ptes(struct mm_struct *mm,
  				unsigned long addr, pte_t *ptep, unsigned int nr)
 diff --git a/arch/arm64/mm/contpte.c b/arch/arm64/mm/contpte.c
-index 0eec7a5..6efc1b5 100644
+index 0eec7a5..975d49b 100644
 --- a/arch/arm64/mm/contpte.c
 +++ b/arch/arm64/mm/contpte.c
 @@ -26,6 +26,26 @@ static inline pte_t *contpte_align_down(pte_t *ptep)
@@ -923,15 +923,7 @@ index 0eec7a5..6efc1b5 100644
  static void contpte_try_unfold_partial(struct mm_struct *mm, unsigned long addr,
  					pte_t *ptep, unsigned int nr)
  {
-@@ -297,7 +317,6 @@ void contpte_set_ptes(struct mm_struct *mm, unsigned long addr,
- 	unsigned long next;
- 	unsigned long end;
- 	unsigned long pfn;
--	pgprot_t prot;
- 
- 	/*
- 	 * The set_ptes() spec guarantees that when nr > 1, the initial state of
-@@ -351,8 +370,9 @@ pte_t contpte_get_and_clear_full_ptes(struct mm_struct *mm,
+@@ -351,8 +371,9 @@ pte_t contpte_get_and_clear_full_ptes(struct mm_struct *mm,
  }
  EXPORT_SYMBOL_GPL(contpte_get_and_clear_full_ptes);
  
@@ -943,7 +935,7 @@ index 0eec7a5..6efc1b5 100644
  {
  	/*
  	 * ptep_clear_flush_young() technically requires us to clear the access
-@@ -361,40 +381,58 @@ int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
+@@ -361,40 +382,58 @@ int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
  	 * contig range when the range is covered by a single folio, we can get
  	 * away with clearing young for the whole contig range here, so we avoid
  	 * having to unfold.
@@ -47137,7 +47129,7 @@ index 9ba2e5e..af36ed6 100644
  	si->swap_file = NULL;
  	si->flags = 0;
 diff --git a/mm/userfaultfd.c b/mm/userfaultfd.c
-index 5e7333c..3d87764 100644
+index 5e7333c..569b019 100644
 --- a/mm/userfaultfd.c
 +++ b/mm/userfaultfd.c
 @@ -15,6 +15,7 @@
@@ -47148,6 +47140,15 @@ index 5e7333c..3d87764 100644
  #include <asm/tlbflush.h>
  #include <asm/tlb.h>
  #include "internal.h"
+@@ -1169,7 +1170,7 @@ static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
+ 	if (src_folio) {
+ 		folio_move_anon_rmap(src_folio, dst_vma);
+ 		src_folio->index = linear_page_index(dst_vma, dst_addr);
+-	} else {
++	} else if (si) {
+ 		/*
+ 		 * Check if the swap entry is cached after acquiring the src_pte
+ 		 * lock. Otherwise, we might miss a newly loaded swap cache folio.
 @@ -1247,6 +1248,9 @@ static long move_pages_ptes(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd
  	pte_t *dst_pte = NULL;
  	pmd_t dummy_pmdval;
@@ -47189,7 +47190,7 @@ index 5e7333c..3d87764 100644
  				spin_unlock(src_ptl);
  				ret = -EBUSY;
  				goto out;
-@@ -1411,6 +1428,77 @@ retry:
+@@ -1411,6 +1428,79 @@ retry:
  		struct folio *folio = NULL;
  
  		entry = pte_to_swp_entry(orig_src_pte);
@@ -47197,7 +47198,7 @@ index 5e7333c..3d87764 100644
 +			int resident;
 +
 +			if (!pte_swp_exclusive(orig_src_pte)) {
-+				err = -EBUSY;
++				ret = -EBUSY;
 +				goto out;
 +			}
 +			/*
@@ -47215,9 +47216,10 @@ index 5e7333c..3d87764 100644
 +			 */
 +			/* Zero is a pure value: MOVE keeps its logical owner count. */
 +			if (!swp_offset(entry)) {
-+				err = move_swap_pte(mm, dst_vma, dst_addr, src_addr,
++				ret = move_swap_pte(mm, dst_vma, dst_addr, src_addr,
 +						    dst_pte, src_pte, orig_dst_pte,
-+						    orig_src_pte, dst_ptl, src_ptl, NULL);
++						    orig_src_pte, dst_ptl, src_ptl,
++						    NULL, NULL, entry);
 +				goto out;
 +			}
 +			if (!memcomp_token_checked ||
@@ -47231,7 +47233,7 @@ index 5e7333c..3d87764 100644
 +				resident = memcomp_entry_resident_get(swp_offset(entry),
 +								      &memcomp_checked_ref);
 +				if (resident < 0) {
-+					err = resident;
++					ret = resident;
 +					goto out;
 +				}
 +				if (resident) {
@@ -47243,31 +47245,32 @@ index 5e7333c..3d87764 100644
 +						.orig_pte = orig_src_pte,
 +					};
 +
-+					err = memcomp_restore_resident(&vmf,
++					ret = memcomp_restore_resident(&vmf,
 +								       &memcomp_checked_ref);
 +					memcomp_token_checked = false;
-+					if (!err)
++					if (!ret)
 +						goto retry;
 +					goto out;
 +				}
 +				if (!memcomp_checked_ref.slot) {
 +					/* Do not move a stale token without a stable entry. */
-+					err = -EAGAIN;
++					ret = -EAGAIN;
 +					goto out;
 +				}
 +				memcomp_checked_entry = entry;
 +				memcomp_token_checked = true;
 +				goto retry;
 +			}
-+			err = move_swap_pte(mm, dst_vma, dst_addr, src_addr,
++			ret = move_swap_pte(mm, dst_vma, dst_addr, src_addr,
 +					    dst_pte, src_pte, orig_dst_pte,
-+					    orig_src_pte, dst_ptl, src_ptl, NULL);
++					    orig_src_pte, dst_ptl, src_ptl,
++					    NULL, NULL, entry);
 +			goto out;
 +		}
  		if (non_swap_entry(entry)) {
  			if (is_migration_entry(entry)) {
  				pte_unmap(src_pte);
-@@ -1473,6 +1561,8 @@ retry:
+@@ -1473,6 +1563,8 @@ retry:
  	}
  
  out:
